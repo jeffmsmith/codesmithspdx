@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+#
+# Single deploy command for Code Smiths LLC website.
+#
+#   ./aws/ansible/deploy
+#
+# Deploys:
+#   1. Frontend to S3 (static site)
+#   2. Lambda function code + configuration
+#   3. CloudFront cache invalidation
+#
+# Requires: aws CLI configured (AWS_PROFILE=codesmiths), node/npm for builds.
+
+set -euo pipefail
+
+cd "$(dirname "$0")"
+REPO_ROOT="$(cd ../.. && pwd)"
+export CODE_SMITHS_PROJECT_ROOT="${CODE_SMITHS_PROJECT_ROOT:-$REPO_ROOT}"
+
+echo "=== Code Smiths LLC deploy ==="
+echo "Project root: ${CODE_SMITHS_PROJECT_ROOT}"
+
+# Ensure AWS collections are installed
+ansible-galaxy collection install -r requirements.yml --force >/dev/null || true
+
+ansible-playbook \
+  -e @group_vars/launch-config.yml \
+  -e "CODE_SMITHS_PROJECT_ROOT=${CODE_SMITHS_PROJECT_ROOT}" \
+  playbooks/deploy.yml \
+  "$@"
+
+echo ""
+echo "Done. Check: https://www.codesmithspdx.com"

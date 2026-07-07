@@ -1,0 +1,7 @@
+---
+# Ansible Galaxy collections needed for deployment.
+# Most are from amazon.aws and community — no EC2 provisioning needed,
+# but amazon.aws.route53 and amazon.aws.s3 are used for DNS management.
+collections:
+  - name: amazon.aws
+    version: ">=6.5.0"

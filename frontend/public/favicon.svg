@@ -1,0 +1,33 @@
+<!-- Code Smiths, LLC — Favicon & Logo Mark -->
+<!-- Minimalist anvil + code bracket fusion, 64x64 viewBox -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <!-- Background circle -->
+  <rect width="64" height="64" rx="16" fill="#0a0a0a" />
+
+  <!-- Code bracket left: < -->
+  <path
+        d="M26 18L14 32L26 46"
+        stroke="#a78bfa"
+        stroke-width="3.5"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+    />
+
+  <!-- Code bracket right: > -->
+  <path
+        d="M38 18L50 32L38 46"
+        stroke="#a78bfa"
+        stroke-width="3.5"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+    />
+
+  <!-- Anvil top bar in center (the "smith" element) -->
+  <rect x="26" y="28" width="12" height="4" rx="1" fill="#c4b5fd" />
+
+  <!-- Anvil stem -->
+  <rect x="29" y="32" width="6" height="8" rx="1" fill="#c4b5fd" />
+
+  <!-- Anvil base -->
+  <rect x="24" y="40" width="16" height="4" rx="1" fill="#c4b5fd" />
+</svg>

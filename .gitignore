@@ -1,0 +1,25 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Playwright browser profile (local debugging)
+.playwright/
+
+# Node modules (already ignored in subdirs, but catch root-level)
+node_modules/
+
+# Local env overrides
+.env
+
+# Zed agent skills (shared across projects, not project-specific)
+.agents/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Logs
+*.log

@@ -1,0 +1,232 @@
+---
+# Deploy Code Smiths LLC website to AWS.
+#
+# Uses aws CLI directly (no amazon.aws collection dependency).
+# Runs entirely on localhost.
+#
+# Required AWS permissions:
+#   s3:* (bucket operations, put-object, delete-object)
+#   lambda:* (create/update function code and config)
+#   cloudfront:* (create invalidation)
+#   iam:CreateRole, iam:AttachRolePolicy (one-time only)
+#
+# Prerequisites:
+#   - aws CLI configured (AWS_PROFILE=codesmiths)
+#   - node/npm installed for builds
+#   - zip installed for Lambda packaging
+
+- name: Deploy Code Smiths LLC website
+  hosts: localhost
+  gather_facts: false
+  connection: local
+  vars_files:
+    - ../group_vars/launch-config.yml
+  vars:
+    frontend_dir: "{{ CODE_SMITHS_PROJECT_ROOT | default('../..') }}/frontend"
+    backend_dir: "{{ CODE_SMITHS_PROJECT_ROOT | default('../..') }}/backend"
+    bundle_dir: "{{ backend_dir }}/bundle"
+    lambda_zip: "{{ backend_dir }}/lambda.zip"
+    account_id: "{{ lookup('pipe', 'aws sts get-caller-identity --query Account --output text 2>/dev/null || echo unknown') }}"
+    lambda_role_arn: "arn:aws:iam::{{ account_id }}:role/codesmiths-lambda-role"
+
+  tasks:
+    # ──────────────────────────────────────────────────────
+    # 1. Build frontend
+    # ──────────────────────────────────────────────────────
+    - name: Build frontend
+      ansible.builtin.command: npm run build
+      args:
+        chdir: "{{ frontend_dir }}"
+      changed_when: false
+
+    - name: Verify frontend build output
+      ansible.builtin.stat:
+        path: "{{ frontend_dir }}/dist/index.html"
+      register: frontend_index
+
+    - name: Fail if frontend build missing
+      ansible.builtin.fail:
+        msg: Frontend build did not produce dist/index.html
+      when: not frontend_index.stat.exists
+
+    # ──────────────────────────────────────────────────────
+    # 2. Build Lambda package
+    # ──────────────────────────────────────────────────────
+    - name: Build Lambda bundle
+      ansible.builtin.command: npm run build
+      args:
+        chdir: "{{ backend_dir }}"
+      changed_when: false
+
+    - name: Create bundle output directory
+      ansible.builtin.file:
+        path: "{{ bundle_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: Build Lambda zip
+      ansible.builtin.command:
+        cmd: "zip -j {{ lambda_zip }} {{ bundle_dir }}/handler.js"
+      changed_when: true
+      args:
+        creates: "{{ lambda_zip }}"
+
+    - name: Verify Lambda zip
+      ansible.builtin.stat:
+        path: "{{ lambda_zip }}"
+      register: lambda_zip_stat
+
+    - name: Fail if Lambda zip missing
+      ansible.builtin.fail:
+        msg: Lambda zip not found at {{ lambda_zip }}
+      when: not lambda_zip_stat.stat.exists
+
+    # ──────────────────────────────────────────────────────
+    # 3. S3 bucket setup
+    # ──────────────────────────────────────────────────────
+    - name: Create S3 bucket
+      ansible.builtin.command:
+        cmd: >
+          aws s3api create-bucket
+          --bucket {{ s3_bucket }}
+          --region {{ aws_region }}
+          --create-bucket-configuration LocationConstraint={{ aws_region }}
+      changed_when: true
+      register: s3_create
+      ignore_errors: true
+
+    - name: Disable S3 Block Public Access
+      ansible.builtin.command:
+        cmd: >
+          aws s3api put-public-access-block
+          --bucket {{ s3_bucket }}
+          --public-access-block-configuration
+          BlockPublicAcls=false,IgnorePublicAcls=false,BlockPublicPolicy=false,RestrictPublicBuckets=false
+      changed_when: true
+      register: s3_public
+      ignore_errors: true
+
+    - name: Set S3 bucket policy for public read
+      ansible.builtin.command:
+        cmd: >
+          aws s3api put-bucket-policy
+          --bucket {{ s3_bucket }}
+          --policy '{"Version":"2012-10-17","Statement":[{"Sid":"PublicReadGetObject","Effect":"Allow","Principal":"*","Action":"s3:GetObject","Resource":"arn:aws:s3:::{{ s3_bucket }}/*"}]}'
+      changed_when: true
+      register: s3_policy
+      ignore_errors: true
+
+    # ──────────────────────────────────────────────────────
+    # 4. Upload frontend assets
+    # ──────────────────────────────────────────────────────
+    - name: Upload static assets (cached, immutable)
+      ansible.builtin.command:
+        cmd: >
+          aws s3 sync {{ frontend_dir }}/dist s3://{{ s3_bucket }}
+          --delete --cache-control "public, max-age=31536000, immutable"
+          --exclude "*.html"
+      changed_when: true
+      when: frontend_index.stat.exists
+
+    - name: Upload HTML (no-cache)
+      ansible.builtin.command:
+        cmd: >
+          aws s3 sync {{ frontend_dir }}/dist s3://{{ s3_bucket }}
+          --delete --cache-control "no-cache"
+          --include "*.html"
+      changed_when: true
+      when: frontend_index.stat.exists
+
+    # ──────────────────────────────────────────────────────
+    # 5. Lambda function
+    # ──────────────────────────────────────────────────────
+    - name: Create Lambda IAM role (one-time only)
+      ansible.builtin.command:
+        cmd: >
+          aws iam create-role
+          --role-name codesmiths-lambda-role
+          --assume-role-policy-document '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Service":"lambda.amazonaws.com"},"Action":"sts:AssumeRole"}]}'
+      changed_when: true
+      register: iam_role
+      ignore_errors: true
+
+    - name: Attach Lambda basic execution policy
+      ansible.builtin.command:
+        cmd: >
+          aws iam attach-role-policy
+          --role-name codesmiths-lambda-role
+          --policy-arn arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      changed_when: true
+      register: iam_attach
+      ignore_errors: true
+
+    - name: Create Lambda function (if not exists)
+      ansible.builtin.command:
+        cmd: >
+          aws lambda create-function
+          --function-name {{ lambda_function_name }}
+          --runtime {{ lambda_runtime }}
+          --handler {{ lambda_handler }}
+          --role {{ lambda_role_arn }}
+          --timeout {{ lambda_timeout }}
+          --memory-size {{ lambda_memory }}
+          --zip-file fileb://{{ lambda_zip }}
+          --description "Contact form handler for Code Smiths LLC"
+      changed_when: true
+      register: lambda_create
+      ignore_errors: true
+
+    - name: Set Lambda env vars
+      ansible.builtin.command:
+        cmd: >
+          aws lambda update-function-configuration
+          --function-name {{ lambda_function_name }}
+          --environment '{"Variables":{"RECIPIENT_EMAIL":"{{ lambda_env_recipient_email }}"}}'
+      changed_when: true
+
+    - name: Update Lambda function code
+      ansible.builtin.command:
+        cmd: >
+          aws lambda update-function-code
+          --function-name {{ lambda_function_name }}
+          --zip-file fileb://{{ lambda_zip }}
+      changed_when: true
+
+    # ──────────────────────────────────────────────────────
+    # 6. CloudFront invalidation
+    # ──────────────────────────────────────────────────────
+    - name: Invalidate CloudFront cache
+      ansible.builtin.command:
+        cmd: >
+          aws cloudfront create-invalidation
+          --distribution-id {{ cloudfront_distribution_id }}
+          --paths "/*"
+      register: cf_invalidation
+      changed_when: cf_invalidation.rc == 0
+
+    - name: CloudFront invalidation summary
+      ansible.builtin.debug:
+        msg: >-
+          CloudFront invalidation created for distribution
+          {{ cloudfront_distribution_id }}.
+          Propagation may take a few minutes.
+
+    # ──────────────────────────────────────────────────────
+    # 7. Summary
+    # ──────────────────────────────────────────────────────
+    - name: Deployment summary
+      ansible.builtin.debug:
+        msg: |
+          === Code Smiths LLC Deployment Complete ===
+
+          S3 Bucket:  {{ s3_bucket }} ({{ aws_region }})
+          Frontend:   {{ frontend_dir }}/dist
+          Lambda:     {{ lambda_function_name }}
+          CloudFront: {{ cloudfront_distribution_id }}
+          URL:        https://www.codesmithspdx.com
+
+          Note: RESEND_API_KEY must be set on the Lambda function.
+                aws lambda update-function-configuration
+                --function-name {{ lambda_function_name }}
+                --environment Variables='{"RESEND_API_KEY":"<your-key>"}'
+                --region {{ aws_region }}

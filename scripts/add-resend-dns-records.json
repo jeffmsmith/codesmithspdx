@@ -1,0 +1,44 @@
+{
+  "Comment": "Add Resend DKIM, MX, and SPF records for codesmithspdx.com",
+  "Changes": [
+    {
+      "Action": "CREATE",
+      "ResourceRecordSet": {
+        "Name": "resend._domainkey.codesmithspdx.com",
+        "Type": "TXT",
+        "TTL": 86400,
+        "ResourceRecords": [
+          {
+            "Value": "\"p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDa0zXK0jhHgyKArUX7LCofDxtRnAtk1rN/uMNT0vjNK/FeeRjV6a4b56JDc6WK9NAjFVa6rlBH/Ix8MM1Z0PVuBWaOoE0ejAv3J5exM0KWCi8vdD1mb69Kp12m6F079jPMqhNgJVPYD8IFOiESEZpj2B50rZ9JgNTOjAWCTMLWuwIDAQAB\""
+          }
+        ]
+      }
+    },
+    {
+      "Action": "CREATE",
+      "ResourceRecordSet": {
+        "Name": "send.codesmithspdx.com",
+        "Type": "MX",
+        "TTL": 3600,
+        "ResourceRecords": [
+          {
+            "Value": "10 feedback-smtp.us-east-1.amazonses.com"
+          }
+        ]
+      }
+    },
+    {
+      "Action": "CREATE",
+      "ResourceRecordSet": {
+        "Name": "send.codesmithspdx.com",
+        "Type": "TXT",
+        "TTL": 86400,
+        "ResourceRecords": [
+          {
+            "Value": "\"v=spf1 include:amazonses.com ~all\""
+          }
+        ]
+      }
+    }
+  ]
+}

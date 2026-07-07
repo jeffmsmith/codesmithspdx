@@ -1,0 +1,22 @@
+{
+  "name": "backend",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "tsx watch src/handler.ts",
+    "build": "tsc && esbuild dist/handler.js --bundle --platform=node --outfile=bundle/handler.js",
+    "start": "tsx src/handler.ts"
+  },
+  "dependencies": {
+    "resend": "^6.17.0",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.162",
+    "@types/node": "^24.13.2",
+    "aws-lambda": "^1.0.7",
+    "esbuild": "^0.28.1",
+    "tsx": "^4.20.6",
+    "typescript": "~5.9.0"
+  }
+}

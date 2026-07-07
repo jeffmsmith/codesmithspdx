@@ -1,0 +1,41 @@
+---
+# Code Smiths LLC website deployment configuration.
+#
+# All resources are in us-west-2 (Oregon), except CloudFront/ACM which
+# must be in us-east-1 per AWS requirements.
+#
+# Environment variables for the frontend build:
+#   VITE_API_URL        — API Gateway or Lambda URL (set after deploy)
+#   VITE_RECAPTCHA_SITE_KEY — reCAPTCHA v3 site key
+
+aws_region: us-west-2
+
+# S3 bucket for the static frontend
+s3_bucket: codesmithsllc-website
+
+# CloudFront
+cloudfront_distribution_id: E238OHFKHA02J5
+cloudfront_invalidation_path: "/*"
+
+# Route 53
+route53_zone: codesmithspdx.com
+route53_zone_id: Z1OYNVNPNAN6RN
+www_cname: dngc7crypo8xn.cloudfront.net
+
+# Lambda function
+lambda_function_name: codesmiths-contact
+lambda_runtime: nodejs20.x
+lambda_handler: handler.handler
+lambda_timeout: 10
+lambda_memory: 128
+
+# Lambda environment variables
+lambda_env_recipient_email: jeff@jeffmsmith.com
+# RESEND_API_KEY and RECAPTCHA_SECRET_KEY must be provided securely.
+# They are NOT stored here — pass them via --extra-vars at runtime or
+# use AWS Secrets Manager / Parameter Store.
+lambda_env_recaptcha_secret_key: ""
+
+# API Gateway (optional — if using Lambda URL directly, leave empty)
+api_gateway_rest_api_id: ""
+api_gateway_stage: api
