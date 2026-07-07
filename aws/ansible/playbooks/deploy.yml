@@ -184,13 +184,42 @@
           --environment '{"Variables":{"RECIPIENT_EMAIL":"{{ lambda_env_recipient_email }}"}}'
       changed_when: true
 
-    - name: Update Lambda function code
+    - name: Get current Lambda CodeSha256
+      ansible.builtin.command:
+        cmd: >
+          aws lambda get-function-configuration
+          --function-name {{ lambda_function_name }}
+          --query CodeSha256 --output text
+      register: current_lambda_hash
+      changed_when: false
+      ignore_errors: true
+
+    - name: Compute new Lambda zip SHA256 (base64)
+      ansible.builtin.shell: |
+        sha256sum {{ lambda_zip }} | awk '{print $1}' | xxd -r -p | base64
+      register: new_lambda_hash
+      changed_when: false
+      when: current_lambda_hash is not skipped
+
+    - name: Update Lambda function code (only if changed)
       ansible.builtin.command:
         cmd: >
           aws lambda update-function-code
           --function-name {{ lambda_function_name }}
           --zip-file fileb://{{ lambda_zip }}
       changed_when: true
+      when: current_lambda_hash is not skipped and current_lambda_hash.stdout != new_lambda_hash.stdout
+      ignore_errors: true
+
+    - name: Skip Lambda update if unchanged
+      ansible.builtin.debug:
+        msg: "Lambda function code unchanged — skipping update."
+      when: current_lambda_hash is not skipped and current_lambda_hash.stdout == new_lambda_hash.stdout
+
+    - name: Skip Lambda update if function does not exist
+      ansible.builtin.debug:
+        msg: "Lambda function does not exist yet — skipping hash comparison. Code will be deployed via create-function."
+      when: current_lambda_hash is skipped
 
     # ──────────────────────────────────────────────────────
     # 6. CloudFront invalidation
